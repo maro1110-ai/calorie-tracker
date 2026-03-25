@@ -350,7 +350,7 @@ function barColor(k){if(!k)return"#E0E0E0";if(k>GOAL)return"#F44336";if(k>GOAL*.
 
 // ── 상태 ──
 let data={}, inputDate=getToday(), weekStart=getWeekStart(getToday()), expandedMeal=null;
-let photoBase64=null, analyzeMeal="breakfast", lastAnalysis=null;
+let photoBase64=null, photoMediaType="image/jpeg", analyzeMeal="breakfast", lastAnalysis=null;
 
 // ── 초기화 ──
 function init(){
@@ -396,6 +396,8 @@ function onPhotoSelected(input){
   const reader=new FileReader();
   reader.onload=e=>{
     const dataUrl=e.target.result;
+    const mime = dataUrl.split(",")[0].match(/:(.*?);/);
+    photoMediaType = mime ? mime[1] : "image/jpeg";
     photoBase64=dataUrl.split(",")[1];
     const preview=document.getElementById("photo-preview");
     preview.src=dataUrl; preview.style.display="block";
@@ -430,23 +432,21 @@ async function analyzePhoto(){
   try {
     const res=await fetch("https://api.anthropic.com/v1/messages",{
       method:"POST",
-      headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01"},
+      headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
       body:JSON.stringify({
         model:"claude-opus-4-5",
         max_tokens:1024,
         messages:[{role:"user",content:[
-          {type:"image",source:{type:"base64",media_type:"image/jpeg",data:photoBase64}},
-          {type:"text",text:`이 음식 사진을 분석해서 아래 JSON 형식으로만 답해줘. 다른 텍스트 없이 JSON만.
-{
-  "items": [
-    {"name":"음식명","amount":"분량","kcal":숫자,"carb":숫자,"prot":숫자,"fat":숫자}
-  ],
-  "total_kcal": 숫자,
-  "total_carb": 숫자,
-  "total_prot": 숫자,
-  "total_fat": 숫자
-}
-칼로리와 영양소는 한국 음식 기준으로 추정해줘. 숫자는 정수 또는 소수점 1자리.`}
+          {type:"image",source:{type:"base64",media_type:photoMediaType,data:photoBase64}},
+          {type:"text",text:`You are a nutrition analyzer. Analyze this food image and respond with ONLY a JSON object. No explanation, no markdown, no code blocks. Just the raw JSON.
+
+Format:
+{"items":[{"name":"음식명","amount":"분량","kcal":0,"carb":0,"prot":0,"fat":0}],"total_kcal":0,"total_carb":0,"total_prot":0,"total_fat":0}
+
+Rules:
+- Use Korean food nutrition database
+- All numbers are integers or 1 decimal place
+- Respond with ONLY the JSON, nothing else`}
         ]}]
       })
     });
@@ -458,14 +458,28 @@ async function analyzePhoto(){
 
     const json=await res.json();
     const text=json.content[0].text.trim();
-    const clean=text.replace(/```json|```/g,"").trim();
-    lastAnalysis=JSON.parse(clean);
+
+    // JSON 추출 — 코드블록, 불필요한 텍스트 제거 후 파싱
+    let parsed = null;
+    // 1) ```json ... ``` 블록 시도
+    const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+    const candidate = fenceMatch ? fenceMatch[1].trim() : text.replace(/```json|```/g,"").trim();
+    // 2) { } 사이 JSON 객체 추출
+    const braceMatch = candidate.match(/\{[\s\S]*\}/);
+    const jsonStr = braceMatch ? braceMatch[0] : candidate;
+    try {
+      parsed = JSON.parse(jsonStr);
+    } catch(parseErr) {
+      console.error("JSON parse error:", parseErr, "raw:", text);
+      throw new Error("AI 응답을 파싱할 수 없어요. 다시 시도해주세요.");
+    }
+    lastAnalysis = parsed;
     renderAnalysisResult(lastAnalysis);
     showToast("✅ 분석 완료!","#1D9E75");
 
   } catch(e) {
     console.error(e);
-    showToast("❌ 분석 실패: "+e.message,"#E74C3C");
+    showToast("❌ " + e.message, "#E74C3C");
   } finally {
     btn.innerHTML="📊 다시 분석하기";
     btn.classList.remove("loading"); btn.disabled=false;
