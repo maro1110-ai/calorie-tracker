@@ -194,11 +194,13 @@
       <div class="card">
         <div class="card-title">📸 사진으로 분석</div>
         <img id="photo-preview" class="photo-preview">
-        <div class="photo-zone" id="photo-zone">
+        <div id="photo-zone" class="photo-zone" style="display:flex;flex-direction:column;gap:10px;cursor:default">
           <div class="pz-icon">🍽️</div>
-          <div class="pz-title">음식 사진 촬영 / 선택</div>
-          <div class="pz-sub">탭하면 카메라 또는 앨범 열림</div>
-          <input type="file" accept="image/*" capture="environment" onchange="onPhotoSelected(this)">
+          <div class="pz-title">음식 사진 선택</div>
+          <label style="display:flex;align-items:center;justify-content:center;gap:6px;padding:12px;background:#378ADD;color:white;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;width:100%">
+            📷 사진
+            <input type="file" accept="image/*" onchange="onPhotoSelected(this)" style="display:none">
+          </label>
         </div>
 
         <!-- 끼니 선택 -->
