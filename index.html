@@ -343,6 +343,8 @@ function fmtMMDD(s){const d=new Date(s+"T00:00:00");return `${d.getMonth()+1}/${
 // ── localStorage ──
 function loadData(){try{return JSON.parse(localStorage.getItem(SK)||"{}");}catch{return{};}}
 function saveData(d){localStorage.setItem(SK,JSON.stringify(d));}
+function loadNdb(){try{return JSON.parse(localStorage.getItem(SK+"-ndb")||"{}");}catch{return{};}}
+function saveNdb(d){localStorage.setItem(SK+"-ndb",JSON.stringify(d));}
 function loadApiKey(){return localStorage.getItem(AK)||"";}
 function saveApiKey2(k){localStorage.setItem(AK,k);}
 
@@ -509,6 +511,19 @@ function applyAnalysis(){
   data[inputDate]=entry;
   saveData(data);
 
+  // 탄단지 + 음식별 상세도 NDB에 저장
+  const ndb=loadNdb();
+  ndb[inputDate+"-"+analyzeMeal]={
+    carb: lastAnalysis.total_carb,
+    prot: lastAnalysis.total_prot,
+    fat:  lastAnalysis.total_fat,
+    items: (lastAnalysis.items||[]).map(it=>({
+      icon:"🍽️", name:it.name, amount:it.amount,
+      kcal:it.kcal, carb:it.carb, prot:it.prot, fat:it.fat
+    }))
+  };
+  saveNdb(ndb);
+
   // 사진 영역 리셋
   document.getElementById("photo-preview").style.display="none";
   document.getElementById("photo-zone").style.display="block";
@@ -584,7 +599,7 @@ function renderNutrition(dateStr,entry,total){
   const details=[];
   meals.forEach(m=>{
     const kcal=entry[m]||0; if(!kcal)return;
-    const db=NDB[`${dateStr}-${m}`];
+    const db=NDB[`${dateStr}-${m}`]||loadNdb()[`${dateStr}-${m}`];
     if(db){tc+=db.carb;tp+=db.prot;tf+=db.fat;details.push({m,kcal,carb:db.carb,prot:db.prot,fat:db.fat,items:db.items});}
     else{const c=r1(kcal*.55/4),p=r1(kcal*.20/4),f=r1(kcal*.25/9);tc+=c;tp+=p;tf+=f;details.push({m,kcal,carb:c,prot:p,fat:f,items:null});}
   });
