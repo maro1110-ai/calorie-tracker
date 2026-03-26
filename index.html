@@ -185,6 +185,17 @@
   .toast{position:fixed;bottom:calc(24px + var(--safe-bottom));left:50%;transform:translateX(-50%) translateY(60px);border-radius:22px;padding:11px 22px;font-size:13px;font-weight:600;color:white;z-index:400;white-space:nowrap;opacity:0;box-shadow:0 4px 16px rgba(0,0,0,0.2);transition:all 0.3s cubic-bezier(0.34,1.56,0.64,1);}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 
+  /* 텍스트 분석 */
+  .text-analyze-area{margin-top:10px;}
+  .text-analyze-input{width:100%;border:1.5px solid #DDE;border-radius:9px;padding:10px 12px;font-size:13px;font-family:inherit;outline:none;resize:none;background:#FAFBFF;color:#444;}
+  .text-analyze-input:focus{border-color:#378ADD;}
+  .text-analyze-btn{width:100%;padding:12px;background:linear-gradient(135deg,#1D9E75,#0E7A5A);color:white;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;margin-top:8px;}
+  .text-analyze-btn:active{opacity:0.8;}
+  .text-analyze-btn.loading{background:linear-gradient(135deg,#666,#444);}
+  .analyze-mode-tabs{display:flex;gap:0;margin-bottom:12px;border-radius:10px;overflow:hidden;border:1.5px solid #DDE;}
+  .amode-btn{flex:1;padding:9px;font-size:12px;font-weight:700;border:none;cursor:pointer;transition:all 0.18s;}
+  .amode-btn.active{background:#378ADD;color:white;}
+  .amode-btn:not(.active){background:white;color:#888;}
   @keyframes spin{to{transform:rotate(360deg);}}
   .spinner{display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,0.3);border-top-color:white;border-radius:50%;animation:spin 0.7s linear infinite;vertical-align:middle;margin-right:6px;}
 </style>
@@ -209,7 +220,16 @@
 
       <!-- 사진 분석 -->
       <div class="card">
-        <div class="card-title">📸 사진으로 분석</div>
+        <div class="card-title">🔍 식사 분석</div>
+
+        <!-- 분석 모드 탭 -->
+        <div class="analyze-mode-tabs">
+          <button class="amode-btn active" id="amode-photo" onclick="switchAnalyzeMode('photo')">📷 사진 분석</button>
+          <button class="amode-btn"        id="amode-text"  onclick="switchAnalyzeMode('text')">✏️ 텍스트 분석</button>
+        </div>
+
+        <!-- 사진 모드 -->
+        <div id="analyze-photo-mode">
         <img id="photo-preview" class="photo-preview">
 
         <div id="photo-zone" class="photo-zone">
@@ -239,6 +259,26 @@
         </div>
 
         <button class="analyze-btn" id="analyze-btn" onclick="analyzePhoto()">📊 AI 분석하기</button>
+        </div><!-- /analyze-photo-mode -->
+
+        <!-- 텍스트 모드 -->
+        <div id="analyze-text-mode" style="display:none">
+          <textarea class="text-analyze-input" id="text-menu-input" rows="4"
+            placeholder="메뉴명을 입력하세요&#10;예) 된장찌개, 공기밥, 김치, 두부조림&#10;예) 스타벅스 아이스 아메리카노 톨, 치즈케이크 1조각"></textarea>
+
+          <!-- 끼니 선택 (텍스트 모드) -->
+          <div style="margin-top:10px">
+            <div style="font-size:12px;color:#777;font-weight:600;margin-bottom:6px">어느 끼니인가요?</div>
+            <div style="display:flex;gap:6px">
+              <button onclick="setAnalyzeMeal('breakfast');setTextMeal('breakfast')" id="tsel-breakfast" style="flex:1;padding:8px 4px;border-radius:9px;border:1.5px solid #EEE;background:white;font-size:11px;font-weight:700;cursor:pointer;color:#EF9F27">🌅 아침</button>
+              <button onclick="setAnalyzeMeal('lunch');setTextMeal('lunch')"         id="tsel-lunch"     style="flex:1;padding:8px 4px;border-radius:9px;border:1.5px solid #EEE;background:white;font-size:11px;font-weight:700;cursor:pointer;color:#378ADD">☀️ 점심</button>
+              <button onclick="setAnalyzeMeal('dinner');setTextMeal('dinner')"       id="tsel-dinner"    style="flex:1;padding:8px 4px;border-radius:9px;border:1.5px solid #EEE;background:white;font-size:11px;font-weight:700;cursor:pointer;color:#7F77DD">🌙 저녁</button>
+              <button onclick="setAnalyzeMeal('snack');setTextMeal('snack')"         id="tsel-snack"     style="flex:1;padding:8px 4px;border-radius:9px;border:1.5px solid #EEE;background:white;font-size:11px;font-weight:700;cursor:pointer;color:#1D9E75">🍪 간식</button>
+            </div>
+          </div>
+
+          <button class="text-analyze-btn" id="text-analyze-btn" onclick="analyzeText()">📊 AI 분석하기</button>
+        </div><!-- /analyze-text-mode -->
 
         <!-- 분석 결과 (수정 가능) -->
         <div class="analysis-result" id="analysis-result">
@@ -401,9 +441,20 @@ function loadApiKey(){return localStorage.getItem(AK)||"";}
 function saveApiKey2(k){localStorage.setItem(AK,k);}
 function barColor(k){if(!k)return"#E0E0E0";if(k>GOAL)return"#F44336";if(k>GOAL*.88)return"#FF9800";return"#4CAF50";}
 
+// 한국 시간 기준 기본 끼니 결정
+function getDefaultMealByKST(){
+  const now = new Date();
+  // KST = UTC+9
+  const kstHour = (now.getUTCHours() + 9) % 24;
+  if(kstHour >= 5  && kstHour < 10) return "breakfast"; // 05~10시 아침
+  if(kstHour >= 10 && kstHour < 15) return "lunch";     // 10~15시 점심
+  if(kstHour >= 15 && kstHour < 21) return "dinner";    // 15~21시 저녁
+  return "snack";                                         // 그 외 간식
+}
+
 // 상태
 let data={},inputDate=getToday(),weekStart=getWeekStart(getToday()),expandedMeal=null;
-let photoBase64=null,photoMediaType="image/jpeg",analyzeMeal="breakfast",lastAnalysis=null;
+let photoBase64=null,photoMediaType="image/jpeg",analyzeMeal=getDefaultMealByKST(),lastAnalysis=null;
 // 수정 가능한 분석 결과 아이템 목록
 let editableItems=[];
 
@@ -415,6 +466,11 @@ function init(){
   saveData(data);
   document.getElementById("input-date").value=inputDate;
   renderInput();
+  // 한국 시간 기준 끼니 버튼 초기 선택 (사진/텍스트 모드 공통)
+  setTimeout(()=>{
+    setAnalyzeMeal(analyzeMeal);
+    setTextMeal(analyzeMeal);
+  }, 0);
   if(!loadApiKey())setTimeout(()=>showToast("🔑 API 키를 설정하면 사진 분석을 사용할 수 있어요","#5A6A85"),1200);
 }
 
@@ -435,6 +491,82 @@ function saveApiKey(){
   if(!k){showToast("⚠️ API 키를 입력해주세요","#E74C3C");return;}
   if(!k.startsWith("sk-")){showToast("⚠️ 올바른 API 키 형식이 아니에요","#E74C3C");return;}
   saveApiKey2(k);closeApiModal();showToast("✅ API 키 저장 완료!","#1D9E75");
+}
+
+// ── 분석 모드 전환 ──
+function switchAnalyzeMode(mode){
+  const isPhoto = mode==="photo";
+  document.getElementById("analyze-photo-mode").style.display = isPhoto?"block":"none";
+  document.getElementById("analyze-text-mode").style.display  = isPhoto?"none":"block";
+  document.getElementById("amode-photo").classList.toggle("active", isPhoto);
+  document.getElementById("amode-text").classList.toggle("active",  !isPhoto);
+  // 분석결과 초기화
+  document.getElementById("analysis-result").style.display="none";
+  lastAnalysis=null; editableItems=[];
+  // 모드 전환 시 현재 선택된 끼니 버튼 유지
+  setAnalyzeMeal(analyzeMeal);
+  setTextMeal(analyzeMeal);
+}
+
+function setTextMeal(m){
+  ["breakfast","lunch","dinner","snack"].forEach(k=>{
+    const btn=document.getElementById("tsel-"+k);
+    if(!btn)return;
+    btn.style.background=k===m?MEAL_COLORS[k]+"22":"white";
+    btn.style.borderColor=k===m?MEAL_COLORS[k]:"#EEE";
+  });
+}
+
+// ── 텍스트 분석 ──
+async function analyzeText(){
+  const apiKey=loadApiKey();
+  if(!apiKey){showToast("🔑 먼저 API 키를 설정해주세요","#E74C3C");openApiModal();return;}
+  const menuText=document.getElementById("text-menu-input").value.trim();
+  if(!menuText){showToast("⚠️ 메뉴명을 입력해주세요","#E74C3C");return;}
+
+  const btn=document.getElementById("text-analyze-btn");
+  btn.innerHTML='<span class="spinner"></span>분석 중...';
+  btn.classList.add("loading");btn.disabled=true;
+
+  try{
+    const res=await fetch("https://api.anthropic.com/v1/messages",{
+      method:"POST",
+      headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+      body:JSON.stringify({
+        model:"claude-opus-4-5",
+        max_tokens:1024,
+        messages:[{role:"user",content:`다음 식단의 칼로리와 영양소를 분석해서 JSON으로만 답해줘. 설명 없이 JSON만.
+
+식단: ${menuText}
+
+형식:
+{"items":[{"name":"음식명","amount":"분량","kcal":0,"carb":0,"prot":0,"fat":0}],"total_kcal":0,"total_carb":0,"total_prot":0,"total_fat":0}
+
+규칙:
+- 한국 음식 영양소 DB 기준
+- 숫자는 정수 또는 소수점 1자리
+- JSON만 반환, 다른 텍스트 없음`}]
+      })
+    });
+    if(!res.ok){const err=await res.json();throw new Error(err.error?.message||"API 오류");}
+    const json=await res.json();
+    const text=json.content[0].text.trim();
+    const fenceMatch=text.match(/```(?:json)?\s*([\s\S]*?)```/);
+    const candidate=fenceMatch?fenceMatch[1].trim():text.replace(/```json|```/g,"").trim();
+    const braceMatch=candidate.match(/\{[\s\S]*\}/);
+    const jsonStr=braceMatch?braceMatch[0]:candidate;
+    let parsed;
+    try{parsed=JSON.parse(jsonStr);}
+    catch(pe){throw new Error("AI 응답을 파싱할 수 없어요. 다시 시도해주세요.");}
+    lastAnalysis=parsed;
+    editableItems=(parsed.items||[]).map(it=>({...it}));
+    renderAnalysisResult();
+    showToast("✅ 분석 완료!","#1D9E75");
+  }catch(e){
+    console.error(e);showToast("❌ "+e.message,"#E74C3C");
+  }finally{
+    btn.innerHTML="📊 AI 분석하기";btn.classList.remove("loading");btn.disabled=false;
+  }
 }
 
 // 사진 선택
