@@ -203,7 +203,7 @@
   .backup-btn.import{background:linear-gradient(135deg,#378ADD,#1A5DB8);color:white;}
   .backup-btn:active{opacity:0.8;}
   /* 푸터 */
-  .app-footer{text-align:center;padding:10px 0 4px;font-size:10px;color:rgba(255,255,255,0.25);flex-shrink:0;background:#1A1A2E;letter-spacing:0.3px;}
+  .app-footer{text-align:center;padding:8px 0 calc(8px + var(--safe-bottom));font-size:10px;color:#AAA;flex-shrink:0;background:#F2F4F8;letter-spacing:0.3px;border-top:1px solid #E5E5E5;}
   @keyframes spin{to{transform:rotate(360deg);}}
   .spinner{display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,0.3);border-top-color:white;border-radius:50%;animation:spin 0.7s linear infinite;vertical-align:middle;margin-right:6px;}
 </style>
@@ -388,6 +388,7 @@
       <div id="week-comment"></div>
     </div>
   </div>
+  <div class="app-footer" id="app-footer"></div>
 </div>
 
 <!-- 목표 칼로리 모달 -->
@@ -420,7 +421,6 @@
   </div>
 </div>
 
-<div class="app-footer" id="app-footer"></div>
 <div class="toast" id="toast"></div>
 
 <script>
