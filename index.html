@@ -202,6 +202,8 @@
   .backup-btn.export{background:linear-gradient(135deg,#1D9E75,#0E7A5A);color:white;}
   .backup-btn.import{background:linear-gradient(135deg,#378ADD,#1A5DB8);color:white;}
   .backup-btn:active{opacity:0.8;}
+  /* 푸터 */
+  .app-footer{text-align:center;padding:10px 0 4px;font-size:10px;color:rgba(255,255,255,0.25);flex-shrink:0;background:#1A1A2E;letter-spacing:0.3px;}
   @keyframes spin{to{transform:rotate(360deg);}}
   .spinner{display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,0.3);border-top-color:white;border-radius:50%;animation:spin 0.7s linear infinite;vertical-align:middle;margin-right:6px;}
 </style>
@@ -418,10 +420,13 @@
   </div>
 </div>
 
+<div class="app-footer" id="app-footer"></div>
 <div class="toast" id="toast"></div>
 
 <script>
 const GOAL_KEY="calorie-tracker-goal";
+const APP_VERSION="v1.0";
+const APP_UPDATED="2026-03-30";
 let GOAL=parseInt(localStorage.getItem(GOAL_KEY)||"1900");
 const SK="calorie-tracker-v1";
 const AK="calorie-tracker-api-key";
@@ -510,6 +515,7 @@ function init(){
   if(!data["2026-03-25"])data["2026-03-25"]={breakfast:385,lunch:0,dinner:0,snack:5};
   saveData(data);
   document.getElementById("input-date").value=inputDate;
+  document.getElementById("app-footer").textContent=`${APP_VERSION} · ${APP_UPDATED}`;
   renderInput();
   // 한국 시간 기준 끼니 버튼 초기 선택 (사진/텍스트 모드 공통)
   setTimeout(()=>{
@@ -567,6 +573,7 @@ function saveGoal(){
   closeGoalModal();
   showToast(`🎯 목표 ${v.toLocaleString()} kcal로 설정!`,"#1D9E75");
   renderInput();
+  renderWeekly(); // 주간 리포트 그래프·%도 즉시 갱신
 }
 
 // API 모달
