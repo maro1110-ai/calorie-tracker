@@ -645,6 +645,18 @@ async function analyzeText(){
     let parsed;
     try{parsed=JSON.parse(jsonStr);}
     catch(pe){throw new Error("AI 응답을 파싱할 수 없어요. 다시 시도해주세요.");}
+    // 간식이면 기존 NDB 항목과 누적 합산 (analyzePhoto와 동일 로직)
+    if(analyzeMeal==="snack"){
+      const existingDb=NDB[`${inputDate}-snack`]||loadNdb()[`${inputDate}-snack`];
+      if(existingDb && existingDb.items && existingDb.items.length){
+        parsed.items=[...existingDb.items,...(parsed.items||[])];
+        parsed.total_kcal=(parsed.total_kcal||0)+existingDb.items.reduce((s,it)=>s+Number(it.kcal),0);
+        parsed.total_carb=r1((parsed.total_carb||0)+existingDb.carb);
+        parsed.total_prot=r1((parsed.total_prot||0)+existingDb.prot);
+        parsed.total_fat =r1((parsed.total_fat||0)+existingDb.fat);
+      }
+    }
+
     lastAnalysis=parsed;
     editableItems=(parsed.items||[]).map(it=>({...it}));
     renderAnalysisResult();
