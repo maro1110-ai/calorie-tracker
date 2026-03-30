@@ -196,6 +196,12 @@
   .amode-btn{flex:1;padding:9px;font-size:12px;font-weight:700;border:none;cursor:pointer;transition:all 0.18s;}
   .amode-btn.active{background:#378ADD;color:white;}
   .amode-btn:not(.active){background:white;color:#888;}
+  /* 백업/복구 */
+  .backup-bar{display:flex;gap:8px;margin-bottom:11px;}
+  .backup-btn{flex:1;padding:10px 6px;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;border:none;display:flex;align-items:center;justify-content:center;gap:5px;}
+  .backup-btn.export{background:linear-gradient(135deg,#1D9E75,#0E7A5A);color:white;}
+  .backup-btn.import{background:linear-gradient(135deg,#378ADD,#1A5DB8);color:white;}
+  .backup-btn:active{opacity:0.8;}
   @keyframes spin{to{transform:rotate(360deg);}}
   .spinner{display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,0.3);border-top-color:white;border-radius:50%;animation:spin 0.7s linear infinite;vertical-align:middle;margin-right:6px;}
 </style>
@@ -302,6 +308,15 @@
           </div>
           <button class="ar-apply-btn" onclick="applyAnalysis()">✅ 이 끼니에 적용하기</button>
         </div>
+      </div>
+
+      <!-- 백업/복구 -->
+      <div class="backup-bar">
+        <button class="backup-btn export" onclick="exportData()">📤 데이터 내보내기</button>
+        <label class="backup-btn import">
+          📥 데이터 불러오기
+          <input type="file" accept=".json" onchange="importData(this)" style="display:none">
+        </label>
       </div>
 
       <!-- 날짜 -->
@@ -1069,6 +1084,71 @@ function renderWeekly(){
 }
 
 function gotoDate(d){inputDate=d;document.getElementById("input-date").value=d;expandedMeal=null;switchTab("input");renderInput();}
+// ── 데이터 내보내기 / 불러오기 ──
+function exportData(){
+  const exportObj={
+    version:1,
+    exportedAt:new Date().toISOString(),
+    goal:GOAL,
+    calorieData:loadData(),
+    ndbData:loadNdb(),
+  };
+  const json=JSON.stringify(exportObj,null,2);
+  const blob=new Blob([json],{type:"application/json"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  const today=toDateStr(new Date());
+  a.href=url;
+  a.download=`calorie-tracker-${today}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast("📤 내보내기 완료!","#1D9E75");
+}
+
+function importData(input){
+  const file=input.files[0];
+  if(!file)return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const obj=JSON.parse(e.target.result);
+      // 유효성 검사
+      if(!obj.calorieData) throw new Error("올바른 백업 파일이 아니에요.");
+
+      // 기존 데이터와 병합 (기존 + 새 데이터 합치기)
+      const existing=loadData();
+      const merged={...obj.calorieData,...existing};
+      saveData(merged);
+      data=merged;
+
+      // NDB 병합
+      if(obj.ndbData){
+        const existingNdb=loadNdb();
+        const mergedNdb={...obj.ndbData,...existingNdb};
+        saveNdb(mergedNdb);
+      }
+
+      // 목표 칼로리 복구
+      if(obj.goal){
+        GOAL=obj.goal;
+        localStorage.setItem(GOAL_KEY,String(obj.goal));
+        MEAL_IDEAL.breakfast=Math.round(GOAL*0.25);
+        MEAL_IDEAL.lunch    =Math.round(GOAL*0.35);
+        MEAL_IDEAL.dinner   =Math.round(GOAL*0.30);
+        MEAL_IDEAL.snack    =Math.round(GOAL*0.10);
+        document.getElementById("goal-display").textContent=GOAL.toLocaleString();
+      }
+
+      renderInput();
+      showToast("📥 데이터 복구 완료!","#1D9E75");
+    }catch(err){
+      showToast("❌ "+err.message,"#E74C3C");
+    }
+    input.value=""; // 파일 초기화 (같은 파일 재선택 가능하도록)
+  };
+  reader.readAsText(file);
+}
+
 function showToast(msg,bg){const t=document.getElementById("toast");t.textContent=msg;t.style.background=bg;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),2400);}
 
 init();
