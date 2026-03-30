@@ -205,7 +205,7 @@
   <div class="app-header">
     <div><h1>🗓️ 칼로리 트래커</h1><div class="sub">매일 기록 · 일요일 주간 리포트</div></div>
     <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
-      <div class="goal-badge">🎯 1,900 kcal</div>
+      <div class="goal-badge" onclick="openGoalModal()" style="cursor:pointer" id="goal-badge">🎯 <span id="goal-display">1,900</span> kcal ✏️</div>
       <button class="api-btn" onclick="openApiModal()">🔑 API 키</button>
     </div>
   </div>
@@ -230,14 +230,14 @@
 
         <!-- 사진 모드 -->
         <div id="analyze-photo-mode">
-        <img id="photo-preview" class="photo-preview">
+        <div id="photo-previews" style="display:none;margin-bottom:8px;"></div>
 
         <div id="photo-zone" class="photo-zone">
           <div style="font-size:30px">🍽️</div>
           <div style="font-size:14px;font-weight:700;color:#378ADD">음식 사진 선택</div>
           <label style="display:flex;align-items:center;justify-content:center;gap:6px;padding:12px;background:#378ADD;color:white;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;width:100%">
             📷 사진
-            <input type="file" accept="image/*" onchange="onPhotoSelected(this)" style="display:none">
+            <input type="file" accept="image/*" multiple onchange="onPhotoSelected(this)" style="display:none">
           </label>
         </div>
 
@@ -361,7 +361,7 @@
       </div>
       <div class="week-sum" id="week-sum"></div>
       <div class="card">
-        <div class="card-title">📊 일별 칼로리 <span style="font-size:10px;color:#AAA;font-weight:400">— 목표 1,900</span></div>
+        <div class="card-title">📊 일별 칼로리 <span style="font-size:10px;color:#AAA;font-weight:400">— 목표 <span class="goal-val">1,900</span></span></div>
         <div class="day-bars" id="day-bars"></div>
       </div>
       <div class="card">
@@ -370,6 +370,24 @@
       </div>
       <div id="week-comment"></div>
     </div>
+  </div>
+</div>
+
+<!-- 목표 칼로리 모달 -->
+<div class="modal-overlay" id="goal-modal" style="display:none" onclick="closeGoalModalOutside(event)">
+  <div class="modal-box">
+    <div class="modal-title">🎯 목표 칼로리 설정</div>
+    <div class="modal-sub">하루 섭취 목표 칼로리를 설정해요.<br>끼니별 적정 칼로리도 자동으로 조정돼요.</div>
+    <input class="modal-input" type="number" id="goal-input" placeholder="1900" inputmode="numeric" min="500" max="5000" oninput="updateGoalPreview(this.value)">
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:12px">
+      <button onclick="setGoalPreset(1200)" style="padding:8px 4px;border:1.5px solid #DDE;border-radius:8px;background:white;font-size:11px;font-weight:700;color:#555;cursor:pointer">1,200</button>
+      <button onclick="setGoalPreset(1500)" style="padding:8px 4px;border:1.5px solid #DDE;border-radius:8px;background:white;font-size:11px;font-weight:700;color:#555;cursor:pointer">1,500</button>
+      <button onclick="setGoalPreset(1900)" style="padding:8px 4px;border:1.5px solid #378ADD;border-radius:8px;background:#EBF4FF;font-size:11px;font-weight:700;color:#378ADD;cursor:pointer">1,900</button>
+      <button onclick="setGoalPreset(2500)" style="padding:8px 4px;border:1.5px solid #DDE;border-radius:8px;background:white;font-size:11px;font-weight:700;color:#555;cursor:pointer">2,500</button>
+    </div>
+    <div style="font-size:11px;color:#AAA;margin-bottom:14px;line-height:1.6" id="goal-meal-preview"></div>
+    <button class="modal-save-btn" onclick="saveGoal()">저장하기</button>
+    <button class="modal-cancel-btn" onclick="closeGoalModal()">취소</button>
   </div>
 </div>
 
@@ -388,7 +406,8 @@
 <div class="toast" id="toast"></div>
 
 <script>
-const GOAL=1900;
+const GOAL_KEY="calorie-tracker-goal";
+let GOAL=parseInt(localStorage.getItem(GOAL_KEY)||"1900");
 const SK="calorie-tracker-v1";
 const AK="calorie-tracker-api-key";
 const DAYS=["일","월","화","수","목","금","토"];
@@ -454,11 +473,22 @@ function getDefaultMealByKST(){
 
 // 상태
 let data={},inputDate=getToday(),weekStart=getWeekStart(getToday()),expandedMeal=null;
-let photoBase64=null,photoMediaType="image/jpeg",analyzeMeal=getDefaultMealByKST(),lastAnalysis=null;
+let photoFiles=[],analyzeMeal=getDefaultMealByKST(),lastAnalysis=null;
 // 수정 가능한 분석 결과 아이템 목록
 let editableItems=[];
 
 function init(){
+  // 저장된 목표 칼로리로 MEAL_IDEAL 동기화
+  MEAL_IDEAL.breakfast=Math.round(GOAL*0.25);
+  MEAL_IDEAL.lunch    =Math.round(GOAL*0.35);
+  MEAL_IDEAL.dinner   =Math.round(GOAL*0.30);
+  MEAL_IDEAL.snack    =Math.round(GOAL*0.10);
+  MEAL_IDEAL_LABEL.breakfast=`적정 약 ${MEAL_IDEAL.breakfast}`;
+  MEAL_IDEAL_LABEL.lunch    =`적정 약 ${MEAL_IDEAL.lunch}`;
+  MEAL_IDEAL_LABEL.dinner   =`적정 약 ${MEAL_IDEAL.dinner}`;
+  MEAL_IDEAL_LABEL.snack    =`적정 약 ${MEAL_IDEAL.snack}`;
+  document.getElementById("goal-display").textContent=GOAL.toLocaleString();
+
   data=loadData();
   if(!data["2026-03-23"])data["2026-03-23"]={breakfast:385,lunch:0,dinner:0,snack:0};
   if(!data["2026-03-24"])data["2026-03-24"]={breakfast:385,lunch:770,dinner:675,snack:0};
@@ -480,6 +510,48 @@ function switchTab(t){
   document.getElementById("tab-input-btn").classList.toggle("active",t==="input");
   document.getElementById("tab-weekly-btn").classList.toggle("active",t==="weekly");
   if(t==="weekly")renderWeekly();
+}
+
+// 목표 칼로리 모달
+function openGoalModal(){
+  document.getElementById("goal-input").value=GOAL;
+  updateGoalPreview(GOAL);
+  document.getElementById("goal-modal").style.display="flex";
+}
+function closeGoalModal(){document.getElementById("goal-modal").style.display="none";}
+function closeGoalModalOutside(e){if(e.target===document.getElementById("goal-modal"))closeGoalModal();}
+function setGoalPreset(v){
+  document.getElementById("goal-input").value=v;
+  updateGoalPreview(v);
+}
+function updateGoalPreview(v){
+  const g=parseInt(v)||1900;
+  // 끼니별 비율: 아침25% 점심35% 저녁30% 간식10%
+  const br=Math.round(g*0.25), lu=Math.round(g*0.35), di=Math.round(g*0.30), sn=Math.round(g*0.10);
+  document.getElementById("goal-meal-preview").innerHTML=
+    `끼니별 적정 칼로리 (자동 조정)<br>🌅 아침 ${br} / ☀️ 점심 ${lu} / 🌙 저녁 ${di} / 🍪 간식 ${sn} kcal`;
+}
+function saveGoal(){
+  const v=parseInt(document.getElementById("goal-input").value);
+  if(!v||v<500||v>5000){showToast("⚠️ 500~5000 사이로 입력해주세요","#E74C3C");return;}
+  GOAL=v;
+  localStorage.setItem(GOAL_KEY,String(v));
+  // 끼니별 적정 칼로리 업데이트
+  MEAL_IDEAL.breakfast=Math.round(v*0.25);
+  MEAL_IDEAL.lunch    =Math.round(v*0.35);
+  MEAL_IDEAL.dinner   =Math.round(v*0.30);
+  MEAL_IDEAL.snack    =Math.round(v*0.10);
+  MEAL_IDEAL_LABEL.breakfast=`적정 약 ${MEAL_IDEAL.breakfast}`;
+  MEAL_IDEAL_LABEL.lunch    =`적정 약 ${MEAL_IDEAL.lunch}`;
+  MEAL_IDEAL_LABEL.dinner   =`적정 약 ${MEAL_IDEAL.dinner}`;
+  MEAL_IDEAL_LABEL.snack    =`적정 약 ${MEAL_IDEAL.snack}`;
+  // 헤더 뱃지 업데이트
+  document.getElementById("goal-display").textContent=v.toLocaleString();
+  // 주간 리포트 총평 문구의 goal 숫자도 반영
+  document.querySelectorAll(".goal-val").forEach(el=>el.textContent=v.toLocaleString());
+  closeGoalModal();
+  showToast(`🎯 목표 ${v.toLocaleString()} kcal로 설정!`,"#1D9E75");
+  renderInput();
 }
 
 // API 모달
@@ -569,25 +641,69 @@ async function analyzeText(){
   }
 }
 
-// 사진 선택
+// 사진 선택 (다중)
 function onPhotoSelected(input){
-  const file=input.files[0];if(!file)return;
-  const reader=new FileReader();
-  reader.onload=e=>{
-    const dataUrl=e.target.result;
-    const mime=dataUrl.split(",")[0].match(/:(.*?);/);
-    photoMediaType=mime?mime[1]:"image/jpeg";
-    photoBase64=dataUrl.split(",")[1];
-    const preview=document.getElementById("photo-preview");
-    preview.src=dataUrl;preview.style.display="block";
+  const files=Array.from(input.files);
+  if(!files.length)return;
+
+  // 파일을 base64로 변환하는 Promise
+  function readFile(file){
+    return new Promise(resolve=>{
+      const reader=new FileReader();
+      reader.onload=e=>{
+        const dataUrl=e.target.result;
+        const mime=dataUrl.split(",")[0].match(/:(.*?);/);
+        resolve({
+          base64:dataUrl.split(",")[1],
+          mediaType:mime?mime[1]:"image/jpeg",
+          dataUrl,
+          name:file.name
+        });
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  Promise.all(files.map(readFile)).then(results=>{
+    photoFiles=results;
+
+    // 미리보기 렌더
+    const previewWrap=document.getElementById("photo-previews");
+    previewWrap.style.display="block";
+    previewWrap.innerHTML=results.map((r,i)=>`
+      <div style="position:relative;display:inline-block;margin:0 4px 4px 0">
+        <img src="${r.dataUrl}" style="height:72px;width:72px;object-fit:cover;border-radius:8px;border:2px solid #DDE">
+        <button onclick="removePhoto(${i})" style="position:absolute;top:-6px;right:-6px;background:#E74C3C;color:white;border:none;border-radius:50%;width:18px;height:18px;font-size:10px;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center">✕</button>
+      </div>`).join("");
+
     document.getElementById("photo-zone").style.display="none";
     document.getElementById("memo-area").style.display="block";
     document.getElementById("meal-select-row").style.display="block";
     document.getElementById("analyze-btn").style.display="block";
     document.getElementById("analysis-result").style.display="none";
-    lastAnalysis=null;editableItems=[];
-  };
-  reader.readAsDataURL(file);
+    lastAnalysis=null; editableItems=[];
+  });
+}
+
+function removePhoto(i){
+  photoFiles.splice(i,1);
+  if(!photoFiles.length){
+    // 모두 삭제 시 초기화
+    document.getElementById("photo-previews").style.display="none";
+    document.getElementById("photo-previews").innerHTML="";
+    document.getElementById("photo-zone").style.display="flex";
+    document.getElementById("memo-area").style.display="none";
+    document.getElementById("meal-select-row").style.display="none";
+    document.getElementById("analyze-btn").style.display="none";
+    return;
+  }
+  // 미리보기 재렌더
+  const previewWrap=document.getElementById("photo-previews");
+  previewWrap.innerHTML=photoFiles.map((r,i)=>`
+    <div style="position:relative;display:inline-block;margin:0 4px 4px 0">
+      <img src="${r.dataUrl}" style="height:72px;width:72px;object-fit:cover;border-radius:8px;border:2px solid #DDE">
+      <button onclick="removePhoto(${i})" style="position:absolute;top:-6px;right:-6px;background:#E74C3C;color:white;border:none;border-radius:50%;width:18px;height:18px;font-size:10px;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center">✕</button>
+    </div>`).join("");
 }
 
 function setAnalyzeMeal(m){
@@ -599,28 +715,34 @@ function setAnalyzeMeal(m){
   });
 }
 
-// AI 분석
+// AI 분석 (다중 사진)
 async function analyzePhoto(){
   const apiKey=loadApiKey();
   if(!apiKey){showToast("🔑 먼저 API 키를 설정해주세요","#E74C3C");openApiModal();return;}
-  if(!photoBase64){showToast("⚠️ 사진을 먼저 선택해주세요","#E74C3C");return;}
+  if(!photoFiles.length){showToast("⚠️ 사진을 먼저 선택해주세요","#E74C3C");return;}
   const btn=document.getElementById("analyze-btn");
-  btn.innerHTML='<span class="spinner"></span>분석 중...';
+  btn.innerHTML=`<span class="spinner"></span>분석 중... (0/${photoFiles.length})`;
   btn.classList.add("loading");btn.disabled=true;
 
   const memo=document.getElementById("photo-memo").value.trim();
   const memoText=memo?`\n\n추가 정보: ${memo}`:"";
 
   try{
-    const res=await fetch("https://api.anthropic.com/v1/messages",{
-      method:"POST",
-      headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
-      body:JSON.stringify({
-        model:"claude-opus-4-5",
-        max_tokens:1024,
-        messages:[{role:"user",content:[
-          {type:"image",source:{type:"base64",media_type:photoMediaType,data:photoBase64}},
-          {type:"text",text:`You are a nutrition analyzer. Analyze this food image and respond with ONLY a JSON object. No explanation, no markdown, no code blocks. Just the raw JSON.${memoText}
+    const allItems=[];
+    let totalCarb=0,totalProt=0,totalFat=0;
+
+    for(let i=0;i<photoFiles.length;i++){
+      btn.innerHTML=`<span class="spinner"></span>분석 중... (${i+1}/${photoFiles.length})`;
+      const pf=photoFiles[i];
+      const res=await fetch("https://api.anthropic.com/v1/messages",{
+        method:"POST",
+        headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+        body:JSON.stringify({
+          model:"claude-opus-4-5",
+          max_tokens:1024,
+          messages:[{role:"user",content:[
+            {type:"image",source:{type:"base64",media_type:pf.mediaType,data:pf.base64}},
+            {type:"text",text:`You are a nutrition analyzer. Analyze this food image and respond with ONLY a JSON object. No explanation, no markdown, no code blocks. Just the raw JSON.${memoText}
 
 Format:
 {"items":[{"name":"음식명","amount":"분량","kcal":0,"carb":0,"prot":0,"fat":0}],"total_kcal":0,"total_carb":0,"total_prot":0,"total_fat":0}
@@ -630,23 +752,50 @@ Rules:
 - All numbers are integers or 1 decimal place
 - If additional info is provided, use it to improve accuracy
 - Respond with ONLY the JSON, nothing else`}
-        ]}]
-      })
-    });
-    if(!res.ok){const err=await res.json();throw new Error(err.error?.message||"API 오류");}
-    const json=await res.json();
-    const text=json.content[0].text.trim();
-    const fenceMatch=text.match(/```(?:json)?\s*([\s\S]*?)```/);
-    const candidate=fenceMatch?fenceMatch[1].trim():text.replace(/```json|```/g,"").trim();
-    const braceMatch=candidate.match(/\{[\s\S]*\}/);
-    const jsonStr=braceMatch?braceMatch[0]:candidate;
-    let parsed;
-    try{parsed=JSON.parse(jsonStr);}
-    catch(pe){console.error("JSON parse error:",pe,"raw:",text);throw new Error("AI 응답을 파싱할 수 없어요. 다시 시도해주세요.");}
-    lastAnalysis=parsed;
-    editableItems=(parsed.items||[]).map(it=>({...it}));
+          ]}]
+        })
+      });
+      if(!res.ok){const err=await res.json();throw new Error(err.error?.message||"API 오류");}
+      const json=await res.json();
+      const text=json.content[0].text.trim();
+      const fenceMatch=text.match(/```(?:json)?\s*([\s\S]*?)```/);
+      const candidate=fenceMatch?fenceMatch[1].trim():text.replace(/```json|```/g,"").trim();
+      const braceMatch=candidate.match(/\{[\s\S]*\}/);
+      const jsonStr=braceMatch?braceMatch[0]:candidate;
+      let parsed;
+      try{parsed=JSON.parse(jsonStr);}
+      catch(pe){throw new Error(`사진 ${i+1} 파싱 실패. 다시 시도해주세요.`);}
+      allItems.push(...(parsed.items||[]));
+      totalCarb+=parsed.total_carb||0;
+      totalProt+=parsed.total_prot||0;
+      totalFat +=parsed.total_fat||0;
+    }
+
+    const totalKcal=allItems.reduce((s,it)=>s+Number(it.kcal),0);
+    lastAnalysis={
+      items:allItems,
+      total_kcal:totalKcal,
+      total_carb:r1(totalCarb),
+      total_prot:r1(totalProt),
+      total_fat:r1(totalFat)
+    };
+
+    // 간식이면 기존 NDB 항목과 합산
+    if(analyzeMeal==="snack"){
+      const existingDb=NDB[`${inputDate}-snack`]||loadNdb()[`${inputDate}-snack`];
+      if(existingDb && existingDb.items){
+        lastAnalysis.items=[...existingDb.items,...allItems];
+        lastAnalysis.total_kcal+=existingDb.items.reduce((s,it)=>s+Number(it.kcal),0);
+        lastAnalysis.total_carb=r1(lastAnalysis.total_carb+existingDb.carb);
+        lastAnalysis.total_prot=r1(lastAnalysis.total_prot+existingDb.prot);
+        lastAnalysis.total_fat =r1(lastAnalysis.total_fat+existingDb.fat);
+      }
+    }
+
+    editableItems=lastAnalysis.items.map(it=>({...it}));
     renderAnalysisResult();
-    showToast("✅ 분석 완료!","#1D9E75");
+    const photoCount=photoFiles.length;
+    showToast(`✅ ${photoCount}장 분석 완료!`,"#1D9E75");
   }catch(e){
     console.error(e);showToast("❌ "+e.message,"#E74C3C");
   }finally{
@@ -658,7 +807,7 @@ Rules:
 function reAnalyze(){
   document.getElementById("analysis-result").style.display="none";
   lastAnalysis=null;editableItems=[];
-  analyzePhoto();
+  if(photoFiles.length) analyzePhoto();
 }
 
 // 분석 결과 렌더 (수정 가능)
@@ -737,7 +886,8 @@ function applyAnalysis(){
   saveNdb(ndb);
 
   // 리셋
-  document.getElementById("photo-preview").style.display="none";
+  document.getElementById("photo-previews").style.display="none";
+  document.getElementById("photo-previews").innerHTML="";
   document.getElementById("photo-zone").style.display="flex";
   document.getElementById("memo-area").style.display="none";
   document.getElementById("meal-select-row").style.display="none";
@@ -745,7 +895,7 @@ function applyAnalysis(){
   document.getElementById("analysis-result").style.display="none";
   document.getElementById("analyze-btn").innerHTML="📊 AI 분석하기";
   document.getElementById("photo-memo").value="";
-  photoBase64=null;lastAnalysis=null;editableItems=[];
+  photoFiles=[];lastAnalysis=null;editableItems=[];
 
   showToast(`✅ ${MEAL_LABELS[analyzeMeal]}에 ${kcal} kcal 적용!`,"#1D9E75");
   renderInput();
@@ -756,7 +906,7 @@ function onDateChange(){inputDate=document.getElementById("input-date").value||g
 // 칼로리 소비 방법 렌더
 function renderBurnCard(over){
   const card=document.getElementById("burn-card");
-  if(over<=0){card.style.display="none";return;}
+  if(over<0){card.style.display="none";return;}
   card.style.display="block";
   document.getElementById("burn-list").innerHTML=EXERCISES.map(ex=>{
     const mins=Math.ceil(over/ex.kcalPer30*30);
@@ -808,7 +958,7 @@ function renderInput(){
   const pct=Math.min(Math.round(total/GOAL*100),100);
   const rem=GOAL-total;
   document.getElementById("total-kcal").textContent=total.toLocaleString()+" kcal";
-  document.getElementById("total-gap").textContent=total===0?"목표까지 1,900 kcal 남음":rem>0?`목표까지 ${rem.toLocaleString()} kcal 남음`:`목표보다 ${Math.abs(rem).toLocaleString()} kcal 초과`;
+  document.getElementById("total-gap").textContent=total===0?`목표까지 ${GOAL.toLocaleString()} kcal 남음`:rem>0?`목표까지 ${rem.toLocaleString()} kcal 남음`:`목표보다 ${Math.abs(rem).toLocaleString()} kcal 초과`;
   const fill=document.getElementById("prog-fill");
   fill.style.width=pct+"%";fill.style.background=pct>=100?"#F44336":pct>=88?"#FF9800":"#4CAF50";
   document.getElementById("prog-pct").textContent=pct+"%";
@@ -868,7 +1018,7 @@ function updateTotal(){
   const total=meals.reduce((s,m)=>s+(Number(document.getElementById("meal-"+m)?.value)||0),0);
   const pct=Math.min(Math.round(total/GOAL*100),100),rem=GOAL-total;
   document.getElementById("total-kcal").textContent=total.toLocaleString()+" kcal";
-  document.getElementById("total-gap").textContent=total===0?"목표까지 1,900 kcal 남음":rem>0?`목표까지 ${rem.toLocaleString()} kcal 남음`:`목표보다 ${Math.abs(rem).toLocaleString()} kcal 초과`;
+  document.getElementById("total-gap").textContent=total===0?`목표까지 ${GOAL.toLocaleString()} kcal 남음`:rem>0?`목표까지 ${rem.toLocaleString()} kcal 남음`:`목표보다 ${Math.abs(rem).toLocaleString()} kcal 초과`;
   const fill=document.getElementById("prog-fill");
   fill.style.width=pct+"%";fill.style.background=pct>=100?"#F44336":pct>=88?"#FF9800":"#4CAF50";
   document.getElementById("prog-pct").textContent=pct+"%";
