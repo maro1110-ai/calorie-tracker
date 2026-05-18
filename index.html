@@ -412,10 +412,26 @@
 <!-- API 모달 -->
 <div class="modal-overlay" id="api-modal" style="display:none" onclick="closeApiModalOutside(event)">
   <div class="modal-box">
-    <div class="modal-title">🔑 Anthropic API 키 설정</div>
+    <div class="modal-title">🔑 AI API 설정</div>
     <div class="modal-sub">API 키는 이 기기에만 저장되며 외부로 전송되지 않아요.</div>
-    <a href="https://console.anthropic.com" target="_blank" class="modal-link">👉 console.anthropic.com 에서 발급받기</a>
-    <input class="modal-input" type="password" id="api-key-input" placeholder="sk-ant-api..." autocomplete="off">
+    <!-- 제공사 선택 탭 -->
+    <div style="display:flex;margin-bottom:14px;border-radius:10px;overflow:hidden;border:1.5px solid #DDE;">
+      <button id="provider-claude-btn" onclick="switchProvider('claude')" style="flex:1;padding:10px;font-size:13px;font-weight:700;border:none;cursor:pointer;background:#378ADD;color:white;">🤖 Claude</button>
+      <button id="provider-google-btn" onclick="switchProvider('google')" style="flex:1;padding:10px;font-size:13px;font-weight:700;border:none;cursor:pointer;background:white;color:#888;">🔍 Google Gemini</button>
+    </div>
+    <!-- Claude -->
+    <div id="provider-claude-section">
+      <div style="font-size:12px;color:#777;font-weight:600;margin-bottom:6px">Anthropic API 키</div>
+      <input class="modal-input" type="password" id="claude-key-input" placeholder="sk-ant-api..." autocomplete="off">
+      <a href="https://console.anthropic.com" target="_blank" class="modal-link">👉 console.anthropic.com 에서 발급받기</a>
+    </div>
+    <!-- Google -->
+    <div id="provider-google-section" style="display:none">
+      <div style="font-size:12px;color:#777;font-weight:600;margin-bottom:6px">Google Gemini API 키</div>
+      <input class="modal-input" type="password" id="google-key-input" placeholder="AIzaSy..." autocomplete="off">
+      <a href="https://aistudio.google.com/app/apikey" target="_blank" class="modal-link">👉 aistudio.google.com 에서 발급받기</a>
+    </div>
+    <div id="current-provider-label" style="font-size:11px;color:#1D9E75;font-weight:600;margin-bottom:12px;text-align:center;"></div>
     <button class="modal-save-btn" onclick="saveApiKey()">저장하기</button>
     <button class="modal-cancel-btn" onclick="closeApiModal()">취소</button>
   </div>
@@ -425,11 +441,13 @@
 
 <script>
 const GOAL_KEY="calorie-tracker-goal";
-const APP_VERSION="v1.1";
+const APP_VERSION="v1.3";
 const APP_UPDATED="2026-05-18";
 let GOAL=parseInt(localStorage.getItem(GOAL_KEY)||"1900");
 const SK="calorie-tracker-v1";
 const AK="calorie-tracker-api-key";
+const GK="calorie-tracker-google-key";
+const AP="calorie-tracker-api-provider"; // "claude" | "google"
 const DAYS=["일","월","화","수","목","금","토"];
 const MEAL_COLORS={breakfast:"#EF9F27",lunch:"#378ADD",dinner:"#7F77DD",snack:"#1D9E75"};
 const MEAL_LABELS={breakfast:"🌅 아침",lunch:"☀️ 점심",dinner:"🌙 저녁",snack:"🍪 간식"};
@@ -516,6 +534,7 @@ function init(){
   saveData(data);
   document.getElementById("input-date").value=inputDate;
   document.getElementById("app-footer").textContent=`${APP_VERSION} · ${APP_UPDATED}`;
+  updateApiHeaderBtn();
   renderInput();
   // 한국 시간 기준 끼니 버튼 초기 선택 (사진/텍스트 모드 공통)
   setTimeout(()=>{
@@ -577,14 +596,62 @@ function saveGoal(){
 }
 
 // API 모달
-function openApiModal(){document.getElementById("api-key-input").value=loadApiKey();document.getElementById("api-modal").style.display="flex";}
+// ── API 제공사 관련 헬퍼 ──
+function loadProvider(){return localStorage.getItem(AP)||"claude";}
+function saveProvider(p){localStorage.setItem(AP,p);}
+function loadGoogleKey(){return localStorage.getItem(GK)||"";}
+function saveGoogleKey(k){localStorage.setItem(GK,k);}
+
+// 현재 선택된 제공사 버튼 레이블 업데이트
+function updateApiHeaderBtn(){
+  const p=loadProvider();
+  const btn=document.querySelector(".api-btn");
+  if(btn) btn.textContent=p==="google"?"🔍 API 키":"🤖 API 키";
+}
+
+function switchProvider(p){
+  document.getElementById("provider-claude-section").style.display=p==="claude"?"block":"none";
+  document.getElementById("provider-google-section").style.display=p==="google"?"block":"none";
+  document.getElementById("provider-claude-btn").style.background=p==="claude"?"#378ADD":"white";
+  document.getElementById("provider-claude-btn").style.color=p==="claude"?"white":"#888";
+  document.getElementById("provider-google-btn").style.background=p==="google"?"#4285F4":"white";
+  document.getElementById("provider-google-btn").style.color=p==="google"?"white":"#888";
+  const lbl=document.getElementById("current-provider-label");
+  const curP=loadProvider();
+  lbl.textContent=p===curP?`✅ 현재 사용 중: ${p==="claude"?"Claude":"Google Gemini"}`:`⚡ 저장하면 ${p==="claude"?"Claude":"Google Gemini"}로 전환`;
+}
+
+function openApiModal(){
+  const p=loadProvider();
+  document.getElementById("claude-key-input").value=loadApiKey();
+  document.getElementById("google-key-input").value=loadGoogleKey();
+  switchProvider(p);
+  document.getElementById("api-modal").style.display="flex";
+}
 function closeApiModal(){document.getElementById("api-modal").style.display="none";}
 function closeApiModalOutside(e){if(e.target===document.getElementById("api-modal"))closeApiModal();}
+
 function saveApiKey(){
-  const k=document.getElementById("api-key-input").value.trim();
-  if(!k){showToast("⚠️ API 키를 입력해주세요","#E74C3C");return;}
-  if(!k.startsWith("sk-")){showToast("⚠️ 올바른 API 키 형식이 아니에요","#E74C3C");return;}
-  saveApiKey2(k);closeApiModal();showToast("✅ API 키 저장 완료!","#1D9E75");
+  // 현재 탭 기준 제공사 판단
+  const claudeActive=document.getElementById("provider-claude-btn").style.background.includes("55");
+  const isGoogle=document.getElementById("provider-google-section").style.display!=="none";
+  const provider=isGoogle?"google":"claude";
+
+  if(provider==="claude"){
+    const k=document.getElementById("claude-key-input").value.trim();
+    if(!k){showToast("⚠️ Claude API 키를 입력해주세요","#E74C3C");return;}
+    if(!k.startsWith("sk-")){showToast("⚠️ 올바른 Claude API 키 형식이 아니에요","#E74C3C");return;}
+    saveApiKey2(k);
+  } else {
+    const k=document.getElementById("google-key-input").value.trim();
+    if(!k){showToast("⚠️ Google API 키를 입력해주세요","#E74C3C");return;}
+    if(!k.startsWith("AIza")){showToast("⚠️ 올바른 Google API 키 형식이 아니에요","#E74C3C");return;}
+    saveGoogleKey(k);
+  }
+  saveProvider(provider);
+  updateApiHeaderBtn();
+  closeApiModal();
+  showToast(`✅ ${provider==="claude"?"Claude":"Google Gemini"} API 키 저장 완료!`,"#1D9E75");
 }
 
 // ── 분석 모드 전환 ──
@@ -613,8 +680,11 @@ function setTextMeal(m){
 
 // ── 텍스트 분석 ──
 async function analyzeText(){
-  const apiKey=loadApiKey();
-  if(!apiKey){showToast("🔑 먼저 API 키를 설정해주세요","#E74C3C");openApiModal();return;}
+  const textProvider=loadProvider();
+  const textApiKey=loadApiKey();
+  const textGoogleKey=loadGoogleKey();
+  if(textProvider==="claude"&&!textApiKey){showToast("🔑 Claude API 키를 설정해주세요","#E74C3C");openApiModal();return;}
+  if(textProvider==="google"&&!textGoogleKey){showToast("🔑 Google API 키를 설정해주세요","#E74C3C");openApiModal();return;}
   const menuText=document.getElementById("text-menu-input").value.trim();
   if(!menuText){showToast("⚠️ 메뉴명을 입력해주세요","#E74C3C");return;}
 
@@ -622,14 +692,7 @@ async function analyzeText(){
   btn.innerHTML='<span class="spinner"></span>분석 중...';
   btn.classList.add("loading");btn.disabled=true;
 
-  try{
-    const res=await fetch("https://api.anthropic.com/v1/messages",{
-      method:"POST",
-      headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
-      body:JSON.stringify({
-        model:"claude-opus-4-5",
-        max_tokens:1024,
-        messages:[{role:"user",content:`다음 식단의 칼로리와 영양소를 분석해서 JSON으로만 답해줘. 설명 없이 JSON만.
+  const textPrompt=`다음 식단의 칼로리와 영양소를 분석해서 JSON으로만 답해줘. 설명 없이 JSON만.
 
 식단: ${menuText}
 
@@ -639,12 +702,29 @@ async function analyzeText(){
 규칙:
 - 한국 음식 영양소 DB 기준
 - 숫자는 정수 또는 소수점 1자리
-- JSON만 반환, 다른 텍스트 없음`}]
-      })
-    });
-    if(!res.ok){const err=await res.json();throw new Error(err.error?.message||"API 오류");}
-    const json=await res.json();
-    const text=json.content[0].text.trim();
+- JSON만 반환, 다른 텍스트 없음`;
+
+  try{
+    let text="";
+    if(textProvider==="google"){
+      const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.1-flash-lite:generateContent?key=${textGoogleKey}`,{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({contents:[{parts:[{text:textPrompt}]}],generationConfig:{maxOutputTokens:1024}})
+      });
+      if(!res.ok){const err=await res.json();throw new Error(err.error?.message||"Google API 오류");}
+      const json=await res.json();
+      text=json.candidates?.[0]?.content?.parts?.[0]?.text?.trim()||"";
+    } else {
+      const res=await fetch("https://api.anthropic.com/v1/messages",{
+        method:"POST",
+        headers:{"Content-Type":"application/json","x-api-key":textApiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+        body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:1024,messages:[{role:"user",content:textPrompt}]})
+      });
+      if(!res.ok){const err=await res.json();throw new Error(err.error?.message||"Claude API 오류");}
+      const json=await res.json();
+      text=json.content[0].text.trim();
+    }
     const fenceMatch=text.match(/```(?:json)?\s*([\s\S]*?)```/);
     const candidate=fenceMatch?fenceMatch[1].trim():text.replace(/```json|```/g,"").trim();
     const braceMatch=candidate.match(/\{[\s\S]*\}/);
@@ -790,8 +870,11 @@ function setAnalyzeMeal(m){
 
 // AI 분석 (다중 사진)
 async function analyzePhoto(){
+  const provider=loadProvider();
   const apiKey=loadApiKey();
-  if(!apiKey){showToast("🔑 먼저 API 키를 설정해주세요","#E74C3C");openApiModal();return;}
+  const googleKey=loadGoogleKey();
+  if(provider==="claude"&&!apiKey){showToast("🔑 Claude API 키를 설정해주세요","#E74C3C");openApiModal();return;}
+  if(provider==="google"&&!googleKey){showToast("🔑 Google API 키를 설정해주세요","#E74C3C");openApiModal();return;}
   if(!photoFiles.length){showToast("⚠️ 사진을 먼저 선택해주세요","#E74C3C");return;}
   const btn=document.getElementById("analyze-btn");
   btn.innerHTML=`<span class="spinner"></span>분석 중... (0/${photoFiles.length})`;
@@ -807,15 +890,20 @@ async function analyzePhoto(){
     for(let i=0;i<photoFiles.length;i++){
       btn.innerHTML=`<span class="spinner"></span>분석 중... (${i+1}/${photoFiles.length})`;
       const pf=photoFiles[i];
-      const res=await fetch("https://api.anthropic.com/v1/messages",{
-        method:"POST",
-        headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
-        body:JSON.stringify({
-          model:"claude-opus-4-5",
-          max_tokens:1024,
-          messages:[{role:"user",content:[
-            {type:"image",source:{type:"base64",media_type:pf.mediaType,data:pf.base64}},
-            {type:"text",text:`You are a nutrition analyzer. Analyze this food image and respond with ONLY a JSON object. No explanation, no markdown, no code blocks. Just the raw JSON.${memoText}
+      const provider=loadProvider();
+      let text="";
+
+      if(provider==="google"){
+        // Google Gemini API
+        const gKey=loadGoogleKey();
+        if(!gKey){throw new Error("Google API 키가 설정되지 않았어요.");}
+        const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.1-flash-lite:generateContent?key=${gKey}`,{
+          method:"POST",
+          headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({
+            contents:[{parts:[
+              {inline_data:{mime_type:pf.mediaType,data:pf.base64}},
+              {text:`You are a nutrition analyzer. Analyze this food image and respond with ONLY a JSON object. No explanation, no markdown, no code blocks. Just the raw JSON.${memoText}
 
 Format:
 {"items":[{"name":"음식명","amount":"분량","kcal":0,"carb":0,"prot":0,"fat":0}],"total_kcal":0,"total_carb":0,"total_prot":0,"total_fat":0}
@@ -825,12 +913,40 @@ Rules:
 - All numbers are integers or 1 decimal place
 - If additional info is provided, use it to improve accuracy
 - Respond with ONLY the JSON, nothing else`}
-          ]}]
-        })
-      });
-      if(!res.ok){const err=await res.json();throw new Error(err.error?.message||"API 오류");}
-      const json=await res.json();
-      const text=json.content[0].text.trim();
+            ]}],
+            generationConfig:{maxOutputTokens:1024}
+          })
+        });
+        if(!res.ok){const err=await res.json();throw new Error(err.error?.message||"Google API 오류");}
+        const json=await res.json();
+        text=json.candidates?.[0]?.content?.parts?.[0]?.text?.trim()||"";
+      } else {
+        // Claude API
+        const res=await fetch("https://api.anthropic.com/v1/messages",{
+          method:"POST",
+          headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+          body:JSON.stringify({
+            model:"claude-sonnet-4-6",
+            max_tokens:1024,
+            messages:[{role:"user",content:[
+              {type:"image",source:{type:"base64",media_type:pf.mediaType,data:pf.base64}},
+              {type:"text",text:`You are a nutrition analyzer. Analyze this food image and respond with ONLY a JSON object. No explanation, no markdown, no code blocks. Just the raw JSON.${memoText}
+
+Format:
+{"items":[{"name":"음식명","amount":"분량","kcal":0,"carb":0,"prot":0,"fat":0}],"total_kcal":0,"total_carb":0,"total_prot":0,"total_fat":0}
+
+Rules:
+- Use Korean food nutrition database
+- All numbers are integers or 1 decimal place
+- If additional info is provided, use it to improve accuracy
+- Respond with ONLY the JSON, nothing else`}
+            ]}]
+          })
+        });
+        if(!res.ok){const err=await res.json();throw new Error(err.error?.message||"Claude API 오류");}
+        const json=await res.json();
+        text=json.content[0].text.trim();
+      }
       const fenceMatch=text.match(/```(?:json)?\s*([\s\S]*?)```/);
       const candidate=fenceMatch?fenceMatch[1].trim():text.replace(/```json|```/g,"").trim();
       const braceMatch=candidate.match(/\{[\s\S]*\}/);
