@@ -441,7 +441,7 @@
 
 <script>
 const GOAL_KEY="calorie-tracker-goal";
-const APP_VERSION="v1.6";
+const APP_VERSION="v1.8";
 const APP_UPDATED="2026-05-18";
 let GOAL=parseInt(localStorage.getItem(GOAL_KEY)||"1900");
 const SK="calorie-tracker-v1";
@@ -596,6 +596,31 @@ function saveGoal(){
 }
 
 // API 모달
+// ── Google 사용 가능 모델 자동 조회 ──
+async function getGoogleModel(apiKey, needsVision=false){
+  try{
+    const res=await fetch(`https://generativelanguage.googleapis.com/v1/models?key=${apiKey}`);
+    if(!res.ok) return "gemini-2.0-flash";
+    const json=await res.json();
+    const models=(json.models||[]).map(m=>m.name.replace("models/",""));
+    // vision 지원 모델 우선순위
+    const preferred=needsVision
+      ?["gemini-2.5-flash-preview-05-20","gemini-2.0-flash","gemini-1.5-flash-latest","gemini-1.5-flash","gemini-1.5-pro-latest"]
+      :["gemini-2.5-flash-preview-05-20","gemini-2.0-flash","gemini-1.5-flash-latest","gemini-1.5-flash","gemini-1.5-pro-latest"];
+    console.log("사용 가능한 Google 모델:", models.join(", "));
+    for(const m of preferred){
+      if(models.some(name=>name===m||name===m.replace("-latest",""))) return m;
+    }
+    // preferred에 없으면 flash 포함된 모델 우선
+    const flash=models.find(m=>m.includes("flash")&&!m.includes("thinking"));
+    if(flash) return flash;
+    const any=models.find(m=>m.includes("gemini")&&!m.includes("thinking"));
+    return any||"gemini-2.0-flash";
+  }catch{
+    return "gemini-1.5-flash-latest";
+  }
+}
+
 // ── API 제공사 관련 헬퍼 ──
 function loadProvider(){return localStorage.getItem(AP)||"claude";}
 function saveProvider(p){localStorage.setItem(AP,p);}
@@ -707,14 +732,16 @@ async function analyzeText(){
   try{
     let text="";
     if(textProvider==="google"){
-      const res=await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash-latest:generateContent?key=${textGoogleKey}`,{
+      const tModel=await getGoogleModel(textGoogleKey, false);
+      const res=await fetch(`https://generativelanguage.googleapis.com/v1/models/${tModel}:generateContent?key=${textGoogleKey}`,{
         method:"POST",
         headers:{"Content-Type":"application/json"},
         body:JSON.stringify({contents:[{parts:[{text:textPrompt}]}],generationConfig:{maxOutputTokens:1024}})
       });
-      if(!res.ok){const err=await res.json();throw new Error(err.error?.message||"Google API 오류");}
+      if(!res.ok){const err=await res.json();const msg=err.error?.message||"Google API 오류";throw new Error("Google: "+msg);}
       const json=await res.json();
-      text=json.candidates?.[0]?.content?.parts?.[0]?.text?.trim()||"";
+      if(!json.candidates?.length){throw new Error("Google: 분석 결과가 없어요. API 키 권한을 확인해주세요.");}
+      text=json.candidates[0]?.content?.parts?.[0]?.text?.trim()||"";
     } else {
       const res=await fetch("https://api.anthropic.com/v1/messages",{
         method:"POST",
@@ -897,7 +924,9 @@ async function analyzePhoto(){
         // Google Gemini API
         const gKey=loadGoogleKey();
         if(!gKey){throw new Error("Google API 키가 설정되지 않았어요.");}
-        const res=await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash-latest:generateContent?key=${gKey}`,{
+        const gModel=await getGoogleModel(gKey, true);
+      btn.innerHTML=`<span class="spinner"></span>분석 중... (${i+1}/${photoFiles.length})`;
+      const res=await fetch(`https://generativelanguage.googleapis.com/v1/models/${gModel}:generateContent?key=${gKey}`,{
           method:"POST",
           headers:{"Content-Type":"application/json"},
           body:JSON.stringify({
@@ -921,7 +950,8 @@ Rules:
           const err=await res.json();
           const msg=err.error?.message||"Google API 오류";
           console.error("Google API error:",JSON.stringify(err));
-          throw new Error("Google: "+msg);
+          console.error("Google full error:",JSON.stringify(err));
+          throw new Error("Google API 오류: "+msg);
         }
         const json=await res.json();
         if(!json.candidates?.length){throw new Error("Google: 분석 결과가 없어요. API 키와 권한을 확인해주세요.");}
