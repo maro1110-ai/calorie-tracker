@@ -425,8 +425,8 @@
 
 <script>
 const GOAL_KEY="calorie-tracker-goal";
-const APP_VERSION="v1.0";
-const APP_UPDATED="2026-03-30";
+const APP_VERSION="v1.1";
+const APP_UPDATED="2026-05-18";
 let GOAL=parseInt(localStorage.getItem(GOAL_KEY)||"1900");
 const SK="calorie-tracker-v1";
 const AK="calorie-tracker-api-key";
@@ -682,32 +682,39 @@ function onPhotoSelected(input){
 
   // 파일을 base64로 변환하는 Promise
   // 이미지 압축 (5MB 이하로 자동 조정)
+  // 이미지 압축 - API 한도 4MB 이하로 강제 조정
   function compressImage(dataUrl, maxBytes){
     return new Promise(resolve=>{
       const img=new Image();
       img.onload=()=>{
-        let quality=0.85;
-        let scale=1.0;
-        // 원본이 이미 작으면 그대로 반환
         const base64Len=(dataUrl.length-dataUrl.indexOf(",")-1)*0.75;
-        if(base64Len<=maxBytes){resolve(dataUrl);return;}
-        // 크기가 크면 scale도 줄이기
-        if(base64Len>maxBytes*3) scale=0.5;
-        else if(base64Len>maxBytes*1.5) scale=0.7;
+        // 최대 해상도 제한 (긴 변 1920px 이하)
+        const MAX_DIM=1920;
+        let scale=1.0;
+        if(img.width>MAX_DIM||img.height>MAX_DIM){
+          scale=MAX_DIM/Math.max(img.width,img.height);
+        }
+        // 크기 기반 추가 축소
+        if(base64Len>maxBytes*3) scale=Math.min(scale,0.4);
+        else if(base64Len>maxBytes*2) scale=Math.min(scale,0.55);
+        else if(base64Len>maxBytes*1.5) scale=Math.min(scale,0.7);
+
         const canvas=document.createElement("canvas");
-        canvas.width =Math.round(img.width *scale);
-        canvas.height=Math.round(img.height*scale);
+        canvas.width =Math.max(1,Math.round(img.width *scale));
+        canvas.height=Math.max(1,Math.round(img.height*scale));
         const ctx=canvas.getContext("2d");
         ctx.drawImage(img,0,0,canvas.width,canvas.height);
-        // quality를 낮춰가며 5MB 이하가 될 때까지 반복
+
+        // quality 0.85부터 0.1 단위로 낮춰가며 maxBytes 이하가 될 때까지 반복
         function tryCompress(q){
-          const compressed=canvas.toDataURL("image/jpeg",q);
-          const size=(compressed.length-compressed.indexOf(",")-1)*0.75;
-          if(size<=maxBytes||q<=0.3){resolve(compressed);}
+          const out=canvas.toDataURL("image/jpeg",q);
+          const size=(out.length-out.indexOf(",")-1)*0.75;
+          if(size<=maxBytes||q<=0.1){resolve(out);}
           else{tryCompress(Math.round((q-0.1)*10)/10);}
         }
-        tryCompress(quality);
+        tryCompress(0.85);
       };
+      img.onerror=()=>resolve(dataUrl); // 실패 시 원본 그대로
       img.src=dataUrl;
     });
   }
@@ -717,8 +724,8 @@ function onPhotoSelected(input){
       const reader=new FileReader();
       reader.onload=async e=>{
         const originalDataUrl=e.target.result;
-        // 5MB 이하로 자동 압축
-        const compressed=await compressImage(originalDataUrl, 4.5*1024*1024);
+        // 4MB 이하로 압축 (API 한도 5MB에서 여유분 확보)
+        const compressed=await compressImage(originalDataUrl, 4*1024*1024);
         resolve({
           base64:compressed.split(",")[1],
           mediaType:"image/jpeg",
